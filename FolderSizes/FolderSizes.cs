@@ -16,6 +16,7 @@ namespace FolderSizes
 		private ItemComparer itemSorter;
 		private Dictionary<string, ListViewItem> subdirPathToItemMap;
 		private DirSizesCalculator dirSizeCalculator;
+		private Timer numTasksUpdater;
 
 		public FolderSizes()
 		{
@@ -23,6 +24,7 @@ namespace FolderSizes
 			itemSorter = new ItemComparer();
 			subdirPathToItemMap = new Dictionary<string, ListViewItem>();
 			dirSizeCalculator = new DirSizesCalculator();
+			numTasksUpdater = new Timer();
 
 			InitializeComponent();
 
@@ -30,10 +32,16 @@ namespace FolderSizes
 			dirListing.SmallImageList = new ImageList();
 			dirListing.SmallImageList.Images.Add("folder", Properties.Resources.folder);
 			dirListing.ListViewItemSorter = itemSorter;
+
+			// numTasksUpdater setup
+			numTasksUpdater.Interval = 500;
+			numTasksUpdater.Tick += UpdateNumTasksLabel;
+			numTasksUpdater.Enabled = true;
 		}
 
 		private void UpdateDirListing()
 		{
+			pathBox.Text = curPath;
 			dirSizeCalculator.AbortTasksAndWait();
 
 			lock (dirListing)
@@ -125,6 +133,12 @@ namespace FolderSizes
 			}
 		}
 
+		private void UpdateNumTasksLabel(object sender, EventArgs e)
+		{
+			int numTasks = dirSizeCalculator.GetNumTasks();
+			numTasksLabel.Text = $"Tasks: {numTasks}";
+		}
+
 		private void openMenuButton_Click(object sender, EventArgs e)
 		{
 			FolderBrowserDialog folderBrowser = new FolderBrowserDialog();
@@ -179,6 +193,38 @@ namespace FolderSizes
 		private void FolderSizes_FormClosing(object sender, FormClosingEventArgs e)
 		{
 			dirSizeCalculator.Terminate();
+		}
+
+		private void pathBox_KeyDown(object sender, KeyEventArgs e)
+		{
+			if (e.KeyCode == Keys.Enter)
+			{
+				try
+				{
+					string newPath = Path.GetFullPath(pathBox.Text);
+					newPath = Path.TrimEndingDirectorySeparator(newPath);
+					FileAttributes attributes = File.GetAttributes(newPath);
+
+					if (attributes.HasFlag(FileAttributes.Directory))
+					{
+						curPath = newPath;
+						UpdateDirListing();
+					}
+				}
+				catch (Exception)
+				{
+					pathBox.Text = curPath;
+				}
+
+				e.Handled = true;
+				e.SuppressKeyPress = true;
+			}
+		}
+
+		private void aboutToolStripMenuItem_Click(object sender, EventArgs e)
+		{
+			AboutBox aboutBox = new AboutBox();
+			aboutBox.ShowDialog();
 		}
 
 		class ItemComparer : IComparer
